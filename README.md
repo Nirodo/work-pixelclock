@@ -212,9 +212,9 @@ The window's **X** only closes the window – the panel keeps being controlled. 
 - The plan (Pro, Max (5x), Max (20x), Team …) is read live from your Claude profile once an hour – so an upgrade shows up without signing in to Claude Code again.
 - If the sign-in has expired, the panel says so – opening Claude Code once is enough.
 - Colours: green < 50 %, yellow < 80 %, red from 80 %.
-- Icon: Claude logo or **Clawd**, the mascot from Claude Code. Clawd is animated: he blinks, looks around, waves, hops and sits down (an ~8 s loop that runs on the panel itself; switch it off with *Animate Clawd*).
+- Icon: Claude logo or **Clawd**, the mascot from Claude Code. Clawd is animated and keeps a pixel of air on each side: he blinks, looks around, waves, walks to and fro, unpacks a laptop and types on it, hops and sits down (a loop that runs on the panel itself; switch it off with *Animate Clawd*). He also reacts to your Claude usage: in the red zone (session ≥ 80 %) he gets a fright, knocks on the 5-hour window and wonders about it; close to the limit (≥ 92 %) he is worn out, yawns and nods off.
 
-  ![Clawd waving, hopping and sitting down](docs/images/clawd.gif)
+  ![Clawd walking, waving, typing on a laptop and reacting to your usage](docs/images/clawd.gif)
 
 ---
 

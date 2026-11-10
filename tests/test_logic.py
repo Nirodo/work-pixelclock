@@ -88,23 +88,45 @@ def test_clawd_icon_has_eyes_and_legs():
     img = pages.load_icon("clawd")
     assert img.size == (16, 10)
     assert img.getpixel((4, 2))[3] == 0 and img.getpixel((11, 2))[3] == 0  # eyes are holes
-    assert img.getpixel((0, 4))[:3] == pages.CLAUDE_ORANGE  # arms reach the edges
+    assert img.getpixel((0, 4))[3] == 0 and img.getpixel((1, 4))[:3] == pages.CLAUDE_ORANGE  # a pixel of air on the left
+    assert img.getpixel((15, 4))[3] == 0 and img.getpixel((14, 4))[:3] == pages.CLAUDE_ORANGE  # ... and on the right
     assert img.getpixel((3, 8))[3] == 255 and img.getpixel((4, 8))[3] == 0  # separate legs
 
 
-def test_clawd_animation_has_wave_sit_hop_and_blink():
+def test_clawd_animation_has_wave_sit_hop_walk_laptop_and_blink():
     frames = pages.clawd_frames()
     names = [name for name, _, _ in frames]
-    for move in ("blink", "wave", "hop", "sit", "look"):
+    for move in ("blink", "wave", "hop", "sit", "look", "walk", "type"):
         assert any(n.startswith(move) for n in names), move
     assert all(img.size == (16, 16) for _, img, _ in frames)
     assert all(ms >= 60 for _, _, ms in frames)
-    assert 4000 <= sum(ms for _, _, ms in frames) <= 12000  # one loop: a few seconds
+    assert 6000 <= sum(ms for _, _, ms in frames) <= 20000  # one richer loop
     imgs = {n: img for n, img, _ in frames}
     assert imgs["wave_up"].tobytes() != imgs["idle"].tobytes()
     assert imgs["hop_top"].getbbox()[1] < imgs["idle"].getbbox()[1]  # in the air: higher
     assert imgs["sit"].getbbox()[3] == imgs["idle"].getbbox()[3]      # sitting: same ground
     assert imgs["sit"].getbbox()[1] > imgs["idle"].getbbox()[1]       # ... but lower body
+    assert imgs["type"].tobytes() != imgs["idle"].tobytes()           # the laptop scene differs
+
+
+def test_clawd_mood_follows_session_usage():
+    assert pages.clawd_mood(None) == "lively"
+    assert pages.clawd_mood(10) == "lively"
+    assert pages.clawd_mood(pages.CLAWD_STARTLED_AT) == "startled"
+    assert pages.clawd_mood(85) == "startled"
+    assert pages.clawd_mood(pages.CLAWD_SLEEPY_AT) == "sleepy"
+    assert pages.clawd_mood(99) == "sleepy"
+
+
+def test_clawd_moods_have_their_own_moves():
+    startled = [n for n, _, _ in pages.clawd_frames("startled")]
+    assert any(n == "knock" for n in startled) and any(n == "wonder" for n in startled)
+    sleepy = [n for n, _, _ in pages.clawd_frames("sleepy")]
+    assert any(n == "yawn" for n in sleepy) and any(n == "doze" for n in sleepy)
+    for mood in ("lively", "startled", "sleepy"):
+        frames = pages.clawd_frames(mood)
+        assert all(img.size == (16, 16) for _, img, _ in frames)
+        assert all(ms >= 60 for _, _, ms in frames)
 
 
 def test_claude_page_animates_clawd_unless_switched_off():
@@ -116,6 +138,17 @@ def test_claude_page_animates_clawd_unless_switched_off():
     assert not still.animated
     logo = pages.render_page({**config.new_page("claude"), "logo": "claude"}, ctx, 64, 16, now)
     assert not logo.animated
+
+
+def test_claude_page_animation_reacts_to_token_usage():
+    now = datetime(2026, 11, 3, 14, 5)
+    page = {**config.new_page("claude"), "logo": "clawd"}
+    lively = pages.render_page(page, pages.Context(claude=sources.ClaudeUsage(session=20, week=10)), 64, 16, now)
+    startled = pages.render_page(page, pages.Context(claude=sources.ClaudeUsage(session=85, week=40)), 64, 16, now)
+    sleepy = pages.render_page(page, pages.Context(claude=sources.ClaudeUsage(session=96, week=80)), 64, 16, now)
+    assert len(lively.frames) == len(pages.clawd_frames("lively"))
+    assert len(startled.frames) == len(pages.clawd_frames("startled"))
+    assert len(sleepy.frames) == len(pages.clawd_frames("sleepy"))
 
 
 def test_claude_page_logo_choice():
