@@ -88,8 +88,7 @@ def test_clawd_icon_has_eyes_and_legs():
     img = pages.load_icon("clawd")
     assert img.size == (16, 10)
     assert img.getpixel((4, 2))[3] == 0 and img.getpixel((11, 2))[3] == 0  # eyes are holes
-    assert img.getpixel((0, 4))[3] == 0 and img.getpixel((1, 4))[:3] == pages.CLAUDE_ORANGE  # a pixel of air on the left
-    assert img.getpixel((15, 4))[3] == 0 and img.getpixel((14, 4))[:3] == pages.CLAUDE_ORANGE  # ... and on the right
+    assert img.getpixel((0, 4))[:3] == pages.CLAUDE_ORANGE  # the arms reach the edges (2 px wide)
     assert img.getpixel((3, 8))[3] == 255 and img.getpixel((4, 8))[3] == 0  # separate legs
 
 
@@ -122,7 +121,7 @@ def test_clawd_moods_have_their_own_moves():
     startled = [n for n, _, _ in pages.clawd_frames("startled")]
     assert any(n == "knock" for n in startled) and any(n == "wonder" for n in startled)
     sleepy = [n for n, _, _ in pages.clawd_frames("sleepy")]
-    assert any(n == "yawn" for n in sleepy) and any(n == "doze" for n in sleepy)
+    assert any(n == "tired" for n in sleepy) and any(n == "doze" for n in sleepy)
     for mood in ("lively", "startled", "sleepy"):
         frames = pages.clawd_frames(mood)
         assert all(img.size == (16, 16) for _, img, _ in frames)

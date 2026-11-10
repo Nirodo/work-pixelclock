@@ -91,14 +91,27 @@ def claude_icon() -> Image.Image:
 
 # Clawd, Claude Code's mascot, from its terminal art "▐▛███▜▌ / ▝▜█████▛▘ / ▘▘ ▝▝":
 # every quadrant block is one pixel wide and two tall (terminal cells are twice as tall as wide).
-# The widest "back" row stops one pixel short of each edge, so Clawd keeps a pixel of air on the sides.
+# Shape kept faithful to the canonical Clawd: a flat wide body with two-pixel-wide arms on each side.
 _CLAWD = [
     "..XXXXXXXXXXXX..",
     "..XX.XXXXXX.XX..",
-    ".XXXXXXXXXXXXXX.",
+    "XXXXXXXXXXXXXXXX",
     "..XXXXXXXXXXXX..",
     "...X.X....X.X...",
 ]
+# while walking the arms tuck in (no full-width back row), so Clawd can slide sideways without clipping
+_CLAWD_WALK = [
+    "..XXXXXXXXXXXX..",
+    "..XX.XXXXXX.XX..",
+    "..XXXXXXXXXXXX..",
+    "..XXXXXXXXXXXX..",
+    "...X.X....X.X...",
+]
+
+# accessory colours (the panel LEDs show real colours, so bubbles and screens need not be orange)
+CLAWD_GREY = (150, 158, 172)     # sleep "z", exclaim / question marks
+CLAWD_SCREEN = (95, 185, 235)    # laptop screen glow, sweat drop
+CLAWD_LAPTOP = (200, 204, 212)   # laptop body
 
 
 def clawd_icon() -> Image.Image:
@@ -113,6 +126,7 @@ def clawd_icon() -> Image.Image:
 
 # Clawd at full resolution (16 x 10, every terminal row doubled) for the animation
 _CLAWD_FULL = [row for row in _CLAWD for _ in (0, 1)]
+_CLAWD_WALK_FULL = [row for row in _CLAWD_WALK for _ in (0, 1)]
 CLAWD_GROUND = 14  # row below Clawd's feet on the 16 x 16 icon canvas
 
 
@@ -120,27 +134,20 @@ def _blank16() -> Image.Image:
     return Image.new("RGBA", (16, 16), (0, 0, 0, 0))
 
 
-def _put(img: Image.Image, x: int, y: int) -> None:
+def _put(img: Image.Image, x: int, y: int, col: tuple = CLAUDE_ORANGE) -> None:
     if 0 <= x < 16 and 0 <= y < 16:
-        img.putpixel((x, y), CLAUDE_ORANGE + (255,))
-
-
-def _draw_rows(img: Image.Image, rows: list, top: int, dx: int = 0) -> None:
-    for y, row in enumerate(rows):
-        for x, c in enumerate(row):
-            if c == "X":
-                _put(img, x + dx, top + y)
+        img.putpixel((x, y), col + (255,))
 
 
 def _clawd_pose(eyes: str = "open", arm: str | None = None, dy: int = 0, sit: bool = False,
-                step: bool = False, dx: int = 0, mouth: bool = False,
-                overlay: tuple = ()) -> Image.Image:
+                step: bool = False, walk: bool = False, dx: int = 0,
+                extra: tuple = ()) -> Image.Image:
     """One frame of front-facing Clawd on a 16 x 16 canvas.
 
-    eyes: open | closed | left | right | wide (startled) | droopy (tired); arm: None | out | in (wave) |
-    knock (reaching right to tap) | knock_in (pulled back); dy: lift (hop); sit: legs folded, body lowered;
-    step: walking legs; dx: shift the whole body sideways; mouth: open a yawn; overlay: extra lit (x, y) pixels."""
-    rows = [list(r) for r in _CLAWD_FULL]
+    eyes: open | closed | left | right | down | wide (startled) | droopy (tired); arm: None | out | in (wave) |
+    knock | knock_in (tap the right edge); dy: lift (hop); sit: legs folded, body lowered; step: walking legs;
+    walk: tuck the arms so Clawd may slide; dx: shift the body sideways; extra: ((x, y, colour), ...) drawn on top."""
+    rows = [list(r) for r in (_CLAWD_WALK_FULL if walk else _CLAWD_FULL)]
     if step:  # walking: the legs are one pixel further
         rows[8] = rows[9] = list("..X.X....X.X....")
     for y in (2, 3):  # eye holes at x 4 and 11
@@ -158,12 +165,10 @@ def _clawd_pose(eyes: str = "open", arm: str | None = None, dy: int = 0, sit: bo
                 rows[y][x] = "."
     else:
         shift = {"left": -1, "right": 1}.get(eyes, 0)
+        drop = 1 if eyes == "down" else 0  # looking down at the laptop
         for y in (2, 3):
             for x in (4 + shift, 11 + shift):
-                rows[y][x] = "."
-    if mouth:  # an open mouth (yawn) below the eyes
-        for x in (7, 8):
-            rows[6][x] = rows[7][x] = "."
+                rows[min(3, y + drop)][x] = "."
     if arm in ("out", "in"):
         for y in (4, 5):  # the right arm leaves its resting place
             rows[y][14] = rows[y][15] = "."
@@ -171,7 +176,10 @@ def _clawd_pose(eyes: str = "open", arm: str | None = None, dy: int = 0, sit: bo
         rows = rows[:8]  # no legs
     top = CLAWD_GROUND - len(rows) - dy
     img = _blank16()
-    _draw_rows(img, rows, top, dx)
+    for y, row in enumerate(rows):
+        for x, c in enumerate(row):
+            if c == "X":
+                _put(img, x + dx, top + y)
     if arm in ("out", "in"):
         # arm from the shoulder up past the head; the hand tips inwards ("in") or outwards ("out")
         for y in range(top - 1, top + 4):
@@ -186,108 +194,68 @@ def _clawd_pose(eyes: str = "open", arm: str | None = None, dy: int = 0, sit: bo
         reach = 15 if arm == "knock" else 14
         for x in range(12, reach + 1):
             _put(img, x + dx, top + 2)
-    for x, y in overlay:
-        _put(img, x, y)
+    for x, y, col in extra:
+        _put(img, x, y, col)
     return img
 
 
-# --- Clawd in profile, unpacking a laptop and typing (a side-on scene in the same 16 x 16) ---
-_PROFILE_SIT = [
-    "................",
-    "....XX..........",
-    "...XXXX.........",
-    "...X.XXX........",
-    "..XXXXXX........",
-    "..XXXXXX........",
-    ".XXXXXXX........",
-    ".XXXXXXX........",
-    ".XXXXXXX........",
-    ".XXXXXXX........",
-    ".XXXXXX.........",
-    ".XXXXXX.........",
-    ".XX..XX.........",
-    ".X....X.........",
-    "................",
-    "................",
-]
-# the front paw reaches right toward the keys; two frames tap up and down
-_PROFILE_TYPE_A = [r for r in _PROFILE_SIT]
-_PROFILE_TYPE_A[10] = ".XXXXXXX.X......"   # paw out, high
-_PROFILE_TYPE_B = [r for r in _PROFILE_SIT]
-_PROFILE_TYPE_B[11] = ".XXXXXXXX......."   # paw down on the keys
-_PROFILE_TYPE_B[10] = ".XXXXXX.X......."
-
-_LAPTOP_CLOSED = [
-    "................", "................", "................", "................",
-    "................", "................", "................", "................",
-    "................", "................", "................",
-    ".........XXXXXX.",
-    ".........XXXXXX.",
-    "................", "................", "................",
-]
-_LAPTOP_OPEN = [
-    "................", "................", "................", "................",
-    "................",
-    "..............XX",
-    ".............XXX",
-    "............XXX.",
-    "...........XXX..",
-    "..........XXX...",
-    ".........XXX....",
-    "........XXXXXXXX",
-    "........XXXXXXXX",
-    "................", "................", "................",
-]
+# --- the laptop Clawd stands on and types (a light device along the bottom of the 16 x 16 canvas) ---
+def _laptop(lit: bool = True) -> tuple:
+    body = [(x, 14, CLAWD_LAPTOP) for x in range(2, 14)]
+    body += [(x, 13, CLAWD_LAPTOP) for x in range(3, 13)]
+    body += [(x, 15, CLAWD_LAPTOP) for x in range(3, 13)]
+    if lit:  # a glowing screen strip on the lid
+        body += [(x, 13, CLAWD_SCREEN) for x in range(6, 10)]
+    return tuple(body)
 
 
-def _profile_pose(clawd_rows: list, laptop_rows: list | None = None) -> Image.Image:
-    img = _blank16()
-    _draw_rows(img, clawd_rows, 0)
-    if laptop_rows is not None:
-        _draw_rows(img, laptop_rows, 0)
-    return img
-
-
-def _laptop_scene() -> list[tuple[str, dict, int]]:
-    """Clawd turns side-on, unpacks the laptop, types for a while, then faces front again."""
-    out: list[tuple[str, dict, int]] = [
-        ("turn", {"eyes": "right"}, 300),
-        ("profile", {"profile": (_PROFILE_SIT, _LAPTOP_CLOSED)}, 450),
-        ("open", {"profile": (_PROFILE_SIT, _LAPTOP_OPEN)}, 450),
-    ]
-    for _ in range(5):  # tap away
-        out.append(("type", {"profile": (_PROFILE_TYPE_A, _LAPTOP_OPEN)}, 180))
-        out.append(("type", {"profile": (_PROFILE_TYPE_B, _LAPTOP_OPEN)}, 180))
-    out += [
-        ("done", {"profile": (_PROFILE_SIT, _LAPTOP_OPEN)}, 400),
-        ("turn", {"eyes": "left"}, 300),
-    ]
-    return out
-
-
-def _walk() -> list[tuple[str, dict, int]]:
-    """A few steps to the right and back to the left (the icon is only 16 wide, so he sways on the spot)."""
-    out: list[tuple[str, dict, int]] = []
-    for dx in (0, 1, 1, 0):
-        out.append(("walk", {"step": dx % 2 == 1, "dx": dx}, 170))
-    out.append(("walk_turn", {"eyes": "right"}, 260))
-    for dx in (0, -1, -1, 0):
-        out.append(("walk", {"step": dx % 2 == 1, "dx": dx}, 170))
-    out.append(("walk_turn", {"eyes": "left"}, 260))
-    return out
+_LAPTOP_SHUT = tuple((x, 15, CLAWD_LAPTOP) for x in range(5, 11)) + tuple((x, 14, CLAWD_LAPTOP) for x in range(4, 12))
 
 
 def _zzz(n: int) -> tuple:
-    """n rising sleep marks to the top right of Clawd's head (n = 1..3)."""
-    marks = [(10, 3), (12, 2), (13, 0)]
-    pts: list[tuple[int, int]] = []
+    """n rising sleep marks to the top right of Clawd's head (n = 1..3), in grey."""
+    marks = [(11, 6), (12, 4), (13, 2)]
+    pts: list[tuple[int, int, tuple]] = []
     for cx, cy in marks[:n]:  # a tiny 3 x 3 "Z"
-        pts += [(cx, cy), (cx + 1, cy), (cx + 2, cy), (cx + 1, cy + 1),
-                (cx, cy + 2), (cx + 1, cy + 2), (cx + 2, cy + 2)]
+        for dx, dy in ((0, 0), (1, 0), (2, 0), (1, 1), (0, 2), (1, 2), (2, 2)):
+            pts.append((cx + dx, cy + dy, CLAWD_GREY))
     return tuple(pts)
 
 
-_QUESTION = ((12, 0), (13, 0), (14, 1), (13, 2), (13, 4))  # a small "?" above the head
+_EXCLAIM = ((13, 0, CLAWD_GREY), (13, 1, CLAWD_GREY), (13, 3, CLAWD_GREY))  # "!" above the head
+_QUESTION = ((12, 0, CLAWD_GREY), (13, 0, CLAWD_GREY), (14, 1, CLAWD_GREY),
+             (13, 2, CLAWD_GREY), (13, 4, CLAWD_GREY))                      # "?" above the head
+_SWEAT = ((15, 5, CLAWD_SCREEN), (15, 6, CLAWD_SCREEN))                     # a drop by the head
+
+
+def _walk() -> list[tuple[str, dict, int]]:
+    """Clawd walks to the right and back to the left; tucked arms let him really move across."""
+    out: list[tuple[str, dict, int]] = []
+    for i, dx in enumerate((-2, -1, 0, 1, 2)):   # off to the right
+        out.append(("walk", {"walk": True, "step": i % 2 == 0, "dx": dx, "dy": i % 2, "eyes": "right"}, 160))
+    out.append(("walk_turn", {"walk": True, "eyes": "left"}, 240))
+    for i, dx in enumerate((2, 1, 0, -1, -2)):   # and back to the left
+        out.append(("walk", {"walk": True, "step": i % 2 == 0, "dx": dx, "dy": i % 2, "eyes": "left"}, 160))
+    out.append(("walk_turn", {"walk": True, "eyes": "right"}, 240))
+    return out
+
+
+def _laptop_scene() -> list[tuple[str, dict, int]]:
+    """Clawd looks down, unpacks a laptop, stands on it and taps away, then hops back off."""
+    out: list[tuple[str, dict, int]] = [
+        ("look_down", {"eyes": "down"}, 320),
+        ("unpack", {"eyes": "down", "extra": _LAPTOP_SHUT}, 360),
+        ("laptop", {"eyes": "down", "dy": 1, "extra": _laptop()}, 420),
+    ]
+    tap = ((13, 7, CLAUDE_ORANGE), (13, 8, CLAUDE_ORANGE))  # a claw dips to the keys
+    for _ in range(5):
+        out.append(("type", {"eyes": "down", "dy": 1, "extra": _laptop() + tap}, 170))
+        out.append(("type", {"eyes": "down", "dy": 1, "extra": _laptop()}, 170))
+    out += [
+        ("laptop", {"eyes": "down", "dy": 1, "extra": _laptop()}, 320),
+        ("off", {"dy": 2}, 160), ("idle", {}, 200),
+    ]
+    return out
 
 
 def _lively_frames() -> list[tuple[str, dict, int]]:
@@ -311,39 +279,32 @@ def _startled_frames() -> list[tuple[str, dict, int]]:
     """Red zone: Clawd gets a fright, knocks on the 5 h window and wonders about it."""
     return [
         ("idle", {}, 500),
-        ("jump", {"eyes": "wide", "dy": 3}, 140), ("jump", {"eyes": "wide", "dy": 2}, 140),
-        ("land", {"eyes": "wide"}, 300), ("look_left", {"eyes": "left"}, 300),
-        ("look_right", {"eyes": "right"}, 300), ("stare", {"eyes": "wide"}, 400),
-        ("knock", {"arm": "knock", "eyes": "right"}, 200), ("knock", {"arm": "knock_in", "eyes": "right"}, 200),
-        ("knock", {"arm": "knock", "eyes": "right"}, 200), ("knock", {"arm": "knock_in", "eyes": "right"}, 200),
-        ("wonder", {"eyes": "left", "overlay": _QUESTION}, 900),
-        ("wonder", {"eyes": "wide", "overlay": _QUESTION}, 500), ("idle", {}, 300),
+        ("jump", {"eyes": "wide", "dy": 3, "extra": _EXCLAIM}, 150),
+        ("jump", {"eyes": "wide", "dy": 2, "extra": _EXCLAIM}, 150),
+        ("land", {"eyes": "wide"}, 280), ("sweat", {"eyes": "wide", "extra": _SWEAT}, 360),
+        ("look_left", {"eyes": "left"}, 280), ("look_right", {"eyes": "right"}, 280),
+        ("knock", {"arm": "knock", "eyes": "right"}, 190), ("knock", {"arm": "knock_in", "eyes": "right"}, 190),
+        ("knock", {"arm": "knock", "eyes": "right"}, 190), ("knock", {"arm": "knock_in", "eyes": "right"}, 190),
+        ("wonder", {"eyes": "left", "extra": _QUESTION}, 850),
+        ("wonder", {"eyes": "wide", "extra": _QUESTION}, 450), ("idle", {}, 260),
     ]
 
 
 def _sleepy_frames() -> list[tuple[str, dict, int]]:
-    """Almost out of tokens: Clawd is worn out, yawns and nods off."""
+    """Almost out of tokens: Clawd is worn out and nods off with a trail of z's."""
     return [
-        ("tired", {"eyes": "droopy"}, 1400), ("yawn", {"eyes": "closed", "mouth": True}, 700),
-        ("tired", {"eyes": "droopy"}, 900),
-        ("doze", {"eyes": "closed", "overlay": _zzz(1)}, 900),
-        ("doze", {"eyes": "closed", "overlay": _zzz(2)}, 900),
-        ("doze", {"sit": True, "eyes": "closed", "overlay": _zzz(3)}, 1200),
-        ("doze", {"sit": True, "eyes": "closed", "overlay": _zzz(2)}, 700),
-        ("wake", {"eyes": "droopy"}, 500),
+        ("tired", {"eyes": "droopy"}, 1300), ("blink_sit", {"sit": True, "eyes": "closed"}, 500),
+        ("tired", {"eyes": "droopy"}, 700),
+        ("doze", {"eyes": "closed", "extra": _zzz(1)}, 850),
+        ("doze", {"eyes": "closed", "extra": _zzz(2)}, 850),
+        ("doze", {"sit": True, "eyes": "closed", "extra": _zzz(3)}, 1200),
+        ("doze", {"sit": True, "eyes": "closed", "extra": _zzz(2)}, 700),
+        ("wake", {"eyes": "droopy"}, 450),
     ]
 
 
 def _render_clawd_seq(seq: list[tuple[str, dict, int]]) -> list[tuple[str, Image.Image, int]]:
-    out = []
-    for name, kw, ms in seq:
-        if "profile" in kw:
-            clawd_rows, laptop_rows = kw["profile"]
-            img = _profile_pose(clawd_rows, laptop_rows)
-        else:
-            img = _clawd_pose(**kw)
-        out.append((name, img, ms))
-    return out
+    return [(name, _clawd_pose(**kw), ms) for name, kw, ms in seq]
 
 
 # token usage (session %) at which Clawd's mood changes; red window starts at 80 (see usage_color)
@@ -757,13 +718,22 @@ def on_air_screen() -> Screen:
 
 
 def animate_icon(screen: Screen, w: int, h: int, mood: str = "lively") -> Rendered:
-    """The page once per Clawd pose. Pages that scroll anyway keep a still Clawd (one loop only)."""
+    """The page once per Clawd pose. Pages that scroll anyway keep a still Clawd (one loop only).
+
+    Clawd is placed one LED in from the left edge (a pixel of air) instead of filling the icon slot."""
     still = render.render_screen(screen, w, h)
     if still.animated:
         return still
+    # draw the text as if an icon occupied the left slot, but leave it empty; Clawd is pasted in below
+    base = render.render_screen(Screen(**{**screen.__dict__, "icon": _blank16()}), w, h).frames[0]
+    margin = max(1, h // 16)  # one LED of air on the left, scaled to the panel
     frames, durations = [], []
     for _name, pose, ms in clawd_frames(mood):
-        frames.append(render.render_screen(Screen(**{**screen.__dict__, "icon": pose}), w, h).frames[0])
+        if pose.size != (h, h):
+            pose = pose.resize((h, h), Image.Resampling.NEAREST)
+        frame = base.copy()
+        frame.paste(pose, (margin, 0), pose)
+        frames.append(frame)
         durations.append(ms)
     return Rendered(frames, durations)
 
